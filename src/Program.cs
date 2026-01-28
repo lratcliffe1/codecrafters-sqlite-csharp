@@ -1,6 +1,5 @@
-using static System.Buffers.Binary.BinaryPrimitives;
+using codecrafters_sqlite.src;
 
-// Parse arguments
 var (path, command) = args.Length switch
 {
     0 => throw new InvalidOperationException("Missing <database path> and <command>"),
@@ -8,20 +7,20 @@ var (path, command) = args.Length switch
     _ => (args[0], args[1])
 };
 
-var databaseFile = File.OpenRead(path);
+FileStream? databaseFile = File.OpenRead(path);
 
-// Parse command and act accordingly
 if (command == ".dbinfo")
 {
-    // You can use print statements as follows for debugging, they'll be visible when running tests.
-    Console.Error.WriteLine("Logs from your program will appear here!");
+    databaseFile.Seek(0, SeekOrigin.Begin);
 
-    // TODO: Uncomment the code below to pass the first stage
-    databaseFile.Seek(16, SeekOrigin.Begin); // Skip the first 16 bytes
-    byte[] pageSizeBytes = new byte[2];
-    databaseFile.Read(pageSizeBytes, 0, 2);
-    var pageSize = ReadUInt16BigEndian(pageSizeBytes);
-    Console.WriteLine($"database page size: {pageSize}");
+    DatabaseHeader databaseHeader = Helper.ReadDatabaseHeader(databaseFile);
+    Console.WriteLine($"database page size: {databaseHeader.PageSize}");
+
+    BTreePageHeader bTreePageHeader = Helper.ReadPageHeader(databaseFile, 1, databaseHeader.PageSize);
+    Console.WriteLine($"number of tables: {bTreePageHeader.CellCount}");
+
+    // Helper.SeeData(databaseHeader);
+    // Helper.SeeData(bTreePageHeader);
 }
 else
 {
