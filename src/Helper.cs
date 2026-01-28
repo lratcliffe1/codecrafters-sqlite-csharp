@@ -116,7 +116,10 @@ public static class Helper
     for (var i = 0; i < sizeOfHeaderReccord; i++)
     {
       if (buffer[i] == 1)
+      {
+        lengths.Add(2);
         break;
+      }
 
       lengths.Add((buffer[i] - 13) / 2);
     }
@@ -126,6 +129,7 @@ public static class Helper
     string type = "";
     string name = "";
     string tableName = "";
+    byte rootPage = 0;
 
     foreach (var len in lengths)
     {
@@ -133,16 +137,13 @@ public static class Helper
       file.ReadExactly(buffer, 0, len);
 
       if (type == "")
-      {
         type = Encoding.UTF8.GetString(buffer, 0, len);
-        continue;
-      }
-      if (name == "")
-      {
+      else if (name == "")
         name = Encoding.UTF8.GetString(buffer, 0, len);
-        continue;
-      }
-      tableName = Encoding.UTF8.GetString(buffer, 0, len);
+      else if (tableName == "")
+        tableName = Encoding.UTF8.GetString(buffer, 0, len);
+      else
+        rootPage = buffer[0];
     }
 
     return new Record
@@ -150,6 +151,7 @@ public static class Helper
       Type = type,
       Name = name,
       TableName = tableName,
+      RootPage = rootPage,
     };
   }
 
