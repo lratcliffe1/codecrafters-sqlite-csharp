@@ -7,9 +7,9 @@ public static class Helper
 {
   public static DatabaseHeader ReadDatabaseHeader(FileStream file)
   {
-    byte[] buffer = new byte[100];
     file.Seek(0, SeekOrigin.Begin);
 
+    byte[] buffer = new byte[100];
     file.ReadExactly(buffer, 0, 100);
 
     ushort rawPageSize = ReadUInt16BigEndian(buffer.AsSpan(16, 2));
@@ -67,6 +67,85 @@ public static class Helper
       RightMostPointer = (type == 0x02 || type == 0x05)
         ? ReadUInt32BigEndian(buffer.AsSpan(8, 4))
         : null
+    };
+  }
+
+  public static List<int> GetCellPointerArray(FileStream file, byte type, int pageNumber, uint pageSize, ushort cellCount)
+  {
+    int pageHeaderSize = (type == 0x02 || type == 0x05) ? 12 : 8;
+    int fileHeaderSize = (pageNumber == 1) ? 100 : 0;
+
+    long pageStart = (pageNumber - 1) * pageSize;
+    long pointerArrayStart = pageStart + fileHeaderSize + pageHeaderSize;
+
+    file.Seek(pointerArrayStart, SeekOrigin.Begin);
+
+    byte[] buffer = new byte[cellCount * 2];
+    file.ReadExactly(buffer, 0, cellCount * 2);
+
+    List<int> pointerArray = [];
+
+    for (var i = 0; i < cellCount; i++)
+    {
+      pointerArray.Add(ReadUInt16BigEndian(buffer.AsSpan(i * 2, 2)));
+    }
+
+    return pointerArray;
+  }
+
+  public static Record GetRecordData(FileStream file, int pointerArrayStart)
+  {
+    file.Seek(pointerArrayStart, SeekOrigin.Begin);
+
+    byte[] buffer = new byte[3];
+    file.ReadExactly(buffer, 0, 3);
+
+    var sizeOfRecord = buffer[0];
+    var rowId = buffer[1];
+    var sizeOfHeaderReccord = buffer[2];
+
+    buffer = new byte[sizeOfHeaderReccord];
+    file.ReadExactly(buffer, 0, sizeOfHeaderReccord);
+
+    List<int> lengths = [];
+
+    for (var i = 0; i < sizeOfHeaderReccord; i++)
+    {
+      if (buffer[i] == 1)
+        break;
+
+      lengths.Add((buffer[i] - 13) / 2);
+    }
+
+    file.Seek(pointerArrayStart + sizeOfHeaderReccord + 2, SeekOrigin.Begin);
+
+    string type = "";
+    string name = "";
+    string tableName = "";
+
+    foreach (var len in lengths)
+    {
+      buffer = new byte[len];
+      file.ReadExactly(buffer, 0, len);
+
+      if (type == "")
+      {
+        type = Encoding.UTF8.GetString(buffer, 0, len);
+        continue;
+      }
+      if (name == "")
+      {
+        name = Encoding.UTF8.GetString(buffer, 0, len);
+        continue;
+      }
+      tableName = Encoding.UTF8.GetString(buffer, 0, len);
+    }
+
+    return new Record
+    {
+      Type = type,
+      Name = name,
+      TableName = tableName,
     };
   }
 
