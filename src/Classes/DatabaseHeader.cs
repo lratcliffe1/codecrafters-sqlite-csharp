@@ -1,4 +1,4 @@
-namespace codecrafters_sqlite.src;
+namespace codecrafters_sqlite.src.Classes;
 
 public class DatabaseHeader
 {

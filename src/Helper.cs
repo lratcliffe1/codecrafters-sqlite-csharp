@@ -1,5 +1,6 @@
 using System.Text;
-using static System.Buffers.Binary.BinaryPrimitives;
+using codecrafters_sqlite.src.Classes;
+using System.Buffers.Binary;
 
 namespace codecrafters_sqlite.src;
 
@@ -12,7 +13,7 @@ public static class Helper
     byte[] buffer = new byte[100];
     file.ReadExactly(buffer, 0, 100);
 
-    ushort rawPageSize = ReadUInt16BigEndian(buffer.AsSpan(16, 2));
+    ushort rawPageSize = BinaryPrimitives.ReadUInt16BigEndian(buffer.AsSpan(16, 2));
 
     return new DatabaseHeader
     {
@@ -24,20 +25,20 @@ public static class Helper
       MaxPayloadFraction = buffer[21],
       MinPayloadFraction = buffer[22],
       LeafPayloadFraction = buffer[23],
-      FileChangeCounter = ReadUInt32BigEndian(buffer.AsSpan(24, 4)),
-      DatabaseSizeInPages = ReadUInt32BigEndian(buffer.AsSpan(28, 4)),
-      FirstFreelistTrunkPage = ReadUInt32BigEndian(buffer.AsSpan(32, 4)),
-      TotalFreelistPages = ReadUInt32BigEndian(buffer.AsSpan(36, 4)),
-      SchemaCookie = ReadUInt32BigEndian(buffer.AsSpan(40, 4)),
-      SchemaFormatNumber = ReadUInt32BigEndian(buffer.AsSpan(44, 4)),
-      DefaultPageCacheSize = ReadUInt32BigEndian(buffer.AsSpan(48, 4)),
-      LargestRootBTreePage = ReadUInt32BigEndian(buffer.AsSpan(52, 4)),
-      DatabaseTextEncoding = ReadUInt32BigEndian(buffer.AsSpan(56, 4)),
-      UserVersion = ReadUInt32BigEndian(buffer.AsSpan(60, 4)),
-      IncrementalVacuumMode = ReadUInt32BigEndian(buffer.AsSpan(64, 4)),
-      ApplicationId = ReadUInt32BigEndian(buffer.AsSpan(68, 4)),
-      VersionValidFor = ReadUInt32BigEndian(buffer.AsSpan(92, 4)),
-      SqliteVersionNumber = ReadUInt32BigEndian(buffer.AsSpan(96, 4))
+      FileChangeCounter = BinaryPrimitives.ReadUInt32BigEndian(buffer.AsSpan(24, 4)),
+      DatabaseSizeInPages = BinaryPrimitives.ReadUInt32BigEndian(buffer.AsSpan(28, 4)),
+      FirstFreelistTrunkPage = BinaryPrimitives.ReadUInt32BigEndian(buffer.AsSpan(32, 4)),
+      TotalFreelistPages = BinaryPrimitives.ReadUInt32BigEndian(buffer.AsSpan(36, 4)),
+      SchemaCookie = BinaryPrimitives.ReadUInt32BigEndian(buffer.AsSpan(40, 4)),
+      SchemaFormatNumber = BinaryPrimitives.ReadUInt32BigEndian(buffer.AsSpan(44, 4)),
+      DefaultPageCacheSize = BinaryPrimitives.ReadUInt32BigEndian(buffer.AsSpan(48, 4)),
+      LargestRootBTreePage = BinaryPrimitives.ReadUInt32BigEndian(buffer.AsSpan(52, 4)),
+      DatabaseTextEncoding = BinaryPrimitives.ReadUInt32BigEndian(buffer.AsSpan(56, 4)),
+      UserVersion = BinaryPrimitives.ReadUInt32BigEndian(buffer.AsSpan(60, 4)),
+      IncrementalVacuumMode = BinaryPrimitives.ReadUInt32BigEndian(buffer.AsSpan(64, 4)),
+      ApplicationId = BinaryPrimitives.ReadUInt32BigEndian(buffer.AsSpan(68, 4)),
+      VersionValidFor = BinaryPrimitives.ReadUInt32BigEndian(buffer.AsSpan(92, 4)),
+      SqliteVersionNumber = BinaryPrimitives.ReadUInt32BigEndian(buffer.AsSpan(96, 4))
     };
   }
 
@@ -55,18 +56,16 @@ public static class Helper
     file.ReadExactly(buffer, 0, 12);
 
     byte type = buffer[0];
-    ushort rawContentStart = ReadUInt16BigEndian(buffer.AsSpan(5, 2));
+    ushort rawContentStart = BinaryPrimitives.ReadUInt16BigEndian(buffer.AsSpan(5, 2));
 
     return new BTreePageHeader
     {
       PageType = type,
-      FirstFreeblock = ReadUInt16BigEndian(buffer.AsSpan(1, 2)),
-      CellCount = ReadUInt16BigEndian(buffer.AsSpan(3, 2)),
+      FirstFreeblock = BinaryPrimitives.ReadUInt16BigEndian(buffer.AsSpan(1, 2)),
+      CellCount = BinaryPrimitives.ReadUInt16BigEndian(buffer.AsSpan(3, 2)),
       CellContentStart = rawContentStart == 0 ? 65536u : rawContentStart,
       FragmentedFreeBytes = buffer[7],
-      RightMostPointer = (type == 0x02 || type == 0x05)
-        ? ReadUInt32BigEndian(buffer.AsSpan(8, 4))
-        : null
+      RightMostPointer = (type == 0x02 || type == 0x05) ? BinaryPrimitives.ReadUInt32BigEndian(buffer.AsSpan(8, 4)) : null
     };
   }
 
@@ -87,10 +86,15 @@ public static class Helper
 
     for (var i = 0; i < cellCount; i++)
     {
-      pointerArray.Add(ReadUInt16BigEndian(buffer.AsSpan(i * 2, 2)));
+      pointerArray.Add(BinaryPrimitives.ReadUInt16BigEndian(buffer.AsSpan(i * 2, 2)));
     }
 
     return pointerArray;
+  }
+
+  public static List<Record> GetRecordData(FileStream file, List<int> pointerArrayStarts)
+  {
+    return pointerArrayStarts.Select(x => GetRecordData(file, x)).ToList();
   }
 
   public static Record GetRecordData(FileStream file, int pointerArrayStart)
@@ -100,8 +104,8 @@ public static class Helper
     byte[] buffer = new byte[3];
     file.ReadExactly(buffer, 0, 3);
 
-    var sizeOfRecord = buffer[0];
-    var rowId = buffer[1];
+    _ = buffer[0];
+    _ = buffer[1];
     var sizeOfHeaderReccord = buffer[2];
 
     buffer = new byte[sizeOfHeaderReccord];
