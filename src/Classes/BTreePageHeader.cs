@@ -1,4 +1,3 @@
-
 namespace codecrafters_sqlite.src.Classes;
 
 public class BTreePageHeader

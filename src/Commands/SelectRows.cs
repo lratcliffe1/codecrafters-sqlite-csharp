@@ -13,67 +13,70 @@ public class SelectRows
   public static void Process(FileStream databaseFile, string command)
   {
     DatabaseHeader databaseHeader = HeaderHelper.ReadDatabaseHeader(databaseFile);
-    BTreePageHeader bTreeHeader = HeaderHelper.ReadPageHeader(databaseFile, 1, databaseHeader.PageSize);
+    BTreePageHeader schemaHeader = HeaderHelper.ReadPageHeader(databaseFile, 1, databaseHeader.PageSize);
+    ParsedSelectQuery query = SqlParseHelper.ParseSelect(command);
 
-    ParsedInput parsedInput = ParceInputSqlHelper.ParseInput(command);
+    List<int> schemaCellPointers = CellPointerHelper.ReadCellPointers(
+      databaseFile,
+      schemaHeader.PageType,
+      1,
+      databaseHeader.PageSize,
+      schemaHeader.CellCount
+    );
+    List<Record> schemaRecords = RecordHelper.ReadSchemaRecords(databaseFile, schemaCellPointers);
 
-    List<int> cellPointerArray = CellPointerHelper.GetCellPointerArray(databaseFile, bTreeHeader.PageType, 1, databaseHeader.PageSize, bTreeHeader.CellCount);
-    List<Record> tables = RecordHelper.GetRecordData(databaseFile, cellPointerArray);
+    Record tableRecord = schemaRecords.First(x => x.Name == query.TableName && x.Type != "index");
+    TableData table = RecordHelper.ParseTableSchema(tableRecord);
 
-    Record record = tables.First(x => x.Name == parsedInput.TableName && x.Type != "index");
-    TableData table = RecordHelper.ParceTableData(record);
-
-    BTreePageHeader bTreePageHeader = HeaderHelper.ReadPageHeader(databaseFile, table.RootPage, databaseHeader.PageSize);
-
-    HashSet<long>? indexedRowIds = GetRowIdsFromIndex(databaseFile, databaseHeader, tables, parsedInput);
+    HashSet<long>? indexedRowIds = TryGetIndexedRowIds(databaseFile, databaseHeader, schemaRecords, query);
 
     if (indexedRowIds != null)
     {
       foreach (var rowId in indexedRowIds)
-        FindAndPrintRowById(databaseFile, databaseHeader, table, parsedInput, table.RootPage, rowId);
+        PrintRowById(databaseFile, databaseHeader, table, query, table.RootPage, rowId);
 
       return;
     }
 
-    RecursivelyCheckPointers(databaseFile, databaseHeader, bTreePageHeader, table, parsedInput, table.RootPage, null);
+    BTreePageHeader tableHeader = HeaderHelper.ReadPageHeader(databaseFile, table.RootPage, databaseHeader.PageSize);
+    ScanTableTree(databaseFile, databaseHeader, tableHeader, table, query, table.RootPage, null);
   }
 
-  private static HashSet<long>? GetRowIdsFromIndex(FileStream databaseFile, DatabaseHeader databaseHeader, List<Record> tables, ParsedInput parsedInput)
+  private static HashSet<long>? TryGetIndexedRowIds(FileStream databaseFile, DatabaseHeader databaseHeader, List<Record> schemaRecords, ParsedSelectQuery query)
   {
-    if (string.IsNullOrEmpty(parsedInput.WhereColumn) || string.IsNullOrEmpty(parsedInput.WhereValue))
+    if (string.IsNullOrEmpty(query.WhereColumn) || string.IsNullOrEmpty(query.WhereValue))
       return null;
 
-    foreach (var t in tables)
+    foreach (var schemaRecord in schemaRecords)
     {
-      if (t.Type != "index")
+      if (schemaRecord.Type != "index")
         continue;
 
-      ParsedIndexSQL parsedIndexSQL = ParceInputSqlHelper.ParseIndexSQL(t.SQL);
+      ParsedIndexDefinition indexDefinition = SqlParseHelper.ParseIndexSql(schemaRecord.Sql);
 
-      if (!string.Equals(parsedIndexSQL.OnTable, parsedInput.TableName, StringComparison.OrdinalIgnoreCase))
+      if (!string.Equals(indexDefinition.OnTable, query.TableName, StringComparison.OrdinalIgnoreCase))
         continue;
 
-      if (!string.Equals(parsedIndexSQL.OnColumn, parsedInput.WhereColumn, StringComparison.OrdinalIgnoreCase))
+      if (!string.Equals(indexDefinition.OnColumn, query.WhereColumn, StringComparison.OrdinalIgnoreCase))
         continue;
 
-      BTreePageHeader bTreeIndexHeader = HeaderHelper.ReadPageHeader(databaseFile, t.RootPage, databaseHeader.PageSize);
+      BTreePageHeader indexHeader = HeaderHelper.ReadPageHeader(databaseFile, schemaRecord.RootPage, databaseHeader.PageSize);
       HashSet<long> rowIds = [];
-      CollectRowIdsFromIndex(databaseFile, databaseHeader, bTreeIndexHeader, parsedInput.WhereValue, t.RootPage, rowIds);
+      CollectMatchingRowIds(databaseFile, databaseHeader, indexHeader, query.WhereValue, schemaRecord.RootPage, rowIds);
       return rowIds;
     }
 
     return null;
   }
 
-  private static void CollectRowIdsFromIndex(FileStream databaseFile, DatabaseHeader databaseHeader, BTreePageHeader bTreePageHeader, string whereValue, int pageNumber, HashSet<long> rowIds)
+  private static void CollectMatchingRowIds(FileStream databaseFile, DatabaseHeader databaseHeader, BTreePageHeader indexHeader, string whereValue, int pageNumber, HashSet<long> rowIds)
   {
-    List<int> cellPointers = CellPointerHelper.GetCellPointerArray(databaseFile, bTreePageHeader.PageType, pageNumber, databaseHeader.PageSize, bTreePageHeader.CellCount);
+    List<int> cellPointers = CellPointerHelper.ReadCellPointers(databaseFile, indexHeader.PageType, pageNumber, databaseHeader.PageSize, indexHeader.CellCount);
 
     long pageStart = (pageNumber - 1) * databaseHeader.PageSize;
 
-    if (bTreePageHeader.PageType == LeafIndexPageType)
+    if (indexHeader.PageType == LeafIndexPageType)
     {
-
       foreach (var pointer in cellPointers)
       {
         databaseFile.Seek(pageStart + pointer, SeekOrigin.Begin);
@@ -85,17 +88,17 @@ public class SelectRows
       return;
     }
 
-    if (bTreePageHeader.PageType != InteriorIndexPageType)
+    if (indexHeader.PageType != InteriorIndexPageType)
       return;
 
-    foreach (var childPage in GetIndexChildPages(databaseFile, pageStart, cellPointers, bTreePageHeader.RightMostPointer, whereValue))
+    foreach (var childPage in EnumerateIndexChildPages(databaseFile, pageStart, cellPointers, indexHeader.RightMostPointer, whereValue))
     {
       BTreePageHeader childHeader = HeaderHelper.ReadPageHeader(databaseFile, childPage, databaseHeader.PageSize);
-      CollectRowIdsFromIndex(databaseFile, databaseHeader, childHeader, whereValue, childPage, rowIds);
+      CollectMatchingRowIds(databaseFile, databaseHeader, childHeader, whereValue, childPage, rowIds);
     }
   }
 
-  private static IEnumerable<int> GetIndexChildPages(FileStream databaseFile, long pageStart, IEnumerable<int> cellPointers, uint? rightMostPointer, string whereValue)
+  private static IEnumerable<int> EnumerateIndexChildPages(FileStream databaseFile, long pageStart, IEnumerable<int> cellPointers, uint? rightMostPointer, string whereValue)
   {
     foreach (var pointer in cellPointers)
     {
@@ -105,7 +108,7 @@ public class SelectRows
       int childPage = (int)System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(childBuffer);
 
       string key = RecordHelper.ReadIndexKeyFromCell(databaseFile);
-      int compare = CompareIndexValues(whereValue, key);
+      int compare = CompareIndexKeys(whereValue, key);
 
       if (compare <= 0)
       {
@@ -118,7 +121,7 @@ public class SelectRows
       yield return (int)rightMostPointer.Value;
   }
 
-  private static int CompareIndexValues(string left, string right)
+  private static int CompareIndexKeys(string left, string right)
   {
     if (long.TryParse(left, out long leftLong) && long.TryParse(right, out long rightLong))
       return leftLong.CompareTo(rightLong);
@@ -129,26 +132,26 @@ public class SelectRows
     return string.CompareOrdinal(left, right);
   }
 
-  private static void RecursivelyCheckPointers(FileStream databaseFile, DatabaseHeader databaseHeader, BTreePageHeader bTreePageHeader, TableData table, ParsedInput parsedInput, int pageNumber, HashSet<long>? allowedRowIds)
+  private static void ScanTableTree(FileStream databaseFile, DatabaseHeader databaseHeader, BTreePageHeader tableHeader, TableData table, ParsedSelectQuery query, int pageNumber, HashSet<long>? allowedRowIds)
   {
-    List<int> cellPointers = CellPointerHelper.GetCellPointerArray(databaseFile, bTreePageHeader.PageType, pageNumber, databaseHeader.PageSize, bTreePageHeader.CellCount);
+    List<int> cellPointers = CellPointerHelper.ReadCellPointers(databaseFile, tableHeader.PageType, pageNumber, databaseHeader.PageSize, tableHeader.CellCount);
 
-    if (bTreePageHeader.PageType == LeafTablePageType)
+    if (tableHeader.PageType == LeafTablePageType)
     {
-      RecordHelper.PrintRecordValues(databaseFile, databaseHeader, table, cellPointers, parsedInput, pageNumber, allowedRowIds);
+      RecordHelper.PrintLeafRows(databaseFile, databaseHeader, table, cellPointers, query, pageNumber, allowedRowIds);
       return;
     }
 
     long pageStart = (pageNumber - 1) * databaseHeader.PageSize;
 
-    foreach (var childPage in GetChildPages(databaseFile, pageStart, cellPointers, bTreePageHeader.RightMostPointer))
+    foreach (var childPage in EnumerateChildPages(databaseFile, pageStart, cellPointers, tableHeader.RightMostPointer))
     {
       BTreePageHeader childHeader = HeaderHelper.ReadPageHeader(databaseFile, childPage, databaseHeader.PageSize);
-      RecursivelyCheckPointers(databaseFile, databaseHeader, childHeader, table, parsedInput, childPage, allowedRowIds);
+      ScanTableTree(databaseFile, databaseHeader, childHeader, table, query, childPage, allowedRowIds);
     }
   }
 
-  private static IEnumerable<int> GetChildPages(FileStream databaseFile, long pageStart, IEnumerable<int> cellPointers, uint? rightMostPointer)
+  private static IEnumerable<int> EnumerateChildPages(FileStream databaseFile, long pageStart, IEnumerable<int> cellPointers, uint? rightMostPointer)
   {
     foreach (var pointer in cellPointers)
     {
@@ -167,15 +170,15 @@ public class SelectRows
     return (int)System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(buffer);
   }
 
-  private static void FindAndPrintRowById(FileStream databaseFile, DatabaseHeader databaseHeader, TableData table, ParsedInput parsedInput, int pageNumber, long rowId)
+  private static void PrintRowById(FileStream databaseFile, DatabaseHeader databaseHeader, TableData table, ParsedSelectQuery query, int pageNumber, long rowId)
   {
     BTreePageHeader header = HeaderHelper.ReadPageHeader(databaseFile, pageNumber, databaseHeader.PageSize);
 
-    List<int> cellPointers = CellPointerHelper.GetCellPointerArray(databaseFile, header.PageType, pageNumber, databaseHeader.PageSize, header.CellCount);
+    List<int> cellPointers = CellPointerHelper.ReadCellPointers(databaseFile, header.PageType, pageNumber, databaseHeader.PageSize, header.CellCount);
 
     if (header.PageType == LeafTablePageType)
     {
-      RecordHelper.PrintRecordValues(databaseFile, databaseHeader, table, cellPointers, parsedInput, pageNumber, new HashSet<long> { rowId });
+      RecordHelper.PrintLeafRows(databaseFile, databaseHeader, table, cellPointers, query, pageNumber, new HashSet<long> { rowId });
       return;
     }
 
@@ -194,12 +197,12 @@ public class SelectRows
       var (key, _) = VarintHelper.ReadVarint(databaseFile);
       if (rowId <= (long)key)
       {
-        FindAndPrintRowById(databaseFile, databaseHeader, table, parsedInput, childPage, rowId);
+        PrintRowById(databaseFile, databaseHeader, table, query, childPage, rowId);
         return;
       }
     }
 
     if (header.RightMostPointer.HasValue)
-      FindAndPrintRowById(databaseFile, databaseHeader, table, parsedInput, (int)header.RightMostPointer.Value, rowId);
+      PrintRowById(databaseFile, databaseHeader, table, query, (int)header.RightMostPointer.Value, rowId);
   }
 }

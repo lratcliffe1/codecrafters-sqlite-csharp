@@ -1,4 +1,4 @@
-namespace codecrafters_sqlite.src;
+namespace codecrafters_sqlite.src.Classes;
 
 public class Record
 {
@@ -6,5 +6,5 @@ public class Record
   public required string Name { get; set; }
   public required string TableName { get; set; }
   public required int RootPage { get; set; }
-  public required string SQL { get; set; }
+  public required string Sql { get; set; }
 }

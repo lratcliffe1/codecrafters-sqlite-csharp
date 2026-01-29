@@ -8,10 +8,10 @@ public class TableInfo
   public static void Process(FileStream databaseFile)
   {
     DatabaseHeader databaseHeader = HeaderHelper.ReadDatabaseHeader(databaseFile);
-    BTreePageHeader bTreeHeader = HeaderHelper.ReadPageHeader(databaseFile, 1, databaseHeader.PageSize);
+    BTreePageHeader schemaHeader = HeaderHelper.ReadPageHeader(databaseFile, 1, databaseHeader.PageSize);
 
-    List<int> cellPointerArray = CellPointerHelper.GetCellPointerArray(databaseFile, bTreeHeader.PageType, 1, databaseHeader.PageSize, bTreeHeader.CellCount);
-    List<Record> records = RecordHelper.GetRecordData(databaseFile, cellPointerArray);
+    List<int> cellPointerArray = CellPointerHelper.ReadCellPointers(databaseFile, schemaHeader.PageType, 1, databaseHeader.PageSize, schemaHeader.CellCount);
+    List<Record> records = RecordHelper.ReadSchemaRecords(databaseFile, cellPointerArray);
 
     Console.WriteLine(string.Join(" ", records.Select(x => x.Name)));
 

@@ -4,14 +4,14 @@ using codecrafters_sqlite.src.Classes;
 
 namespace codecrafters_sqlite.src.Helpers;
 
-public class RecordHelper()
+public static class RecordHelper
 {
-  public static void PrintRecordValues(
+  public static void PrintLeafRows(
     FileStream databaseFile,
     DatabaseHeader databaseHeader,
     TableData table,
     List<int> cellPointerArray,
-    ParsedInput parsedInput,
+    ParsedSelectQuery parsedQuery,
     int pageNumber,
     HashSet<long>? allowedRowIds = null)
   {
@@ -35,8 +35,8 @@ public class RecordHelper()
 
       // 3. Read the columns from the body using the lengths
       int i = 0;
-      List<string> output = [.. new string[parsedInput.Selected.Count]];
-      Dictionary<string, string> keyValuePairs = [];
+      List<string> selectedValues = [.. new string[parsedQuery.Selected.Count]];
+      Dictionary<string, string> rowValues = [];
 
       foreach (var column in table.Columns)
       {
@@ -49,84 +49,84 @@ public class RecordHelper()
         if (isRowIdAlias)
         {
           string rowIdValue = rowId.ToString();
-          keyValuePairs.Add(column.Name, rowIdValue);
+          rowValues.Add(column.Name, rowIdValue);
 
-          var insertIndex = parsedInput.Selected.IndexOf(column.Name);
+          var insertIndex = parsedQuery.Selected.IndexOf(column.Name);
           if (insertIndex != -1)
-            output[insertIndex] = rowIdValue;
+            selectedValues[insertIndex] = rowIdValue;
 
           continue;
         }
 
-        string value = ReadSerialTypeValue(databaseFile, serialType, length);
+        string value = ReadSerialValue(databaseFile, serialType, length);
 
-        keyValuePairs.Add(column.Name, value);
+        rowValues.Add(column.Name, value);
 
-        var selectedIndex = parsedInput.Selected.IndexOf(column.Name);
+        var selectedIndex = parsedQuery.Selected.IndexOf(column.Name);
         if (selectedIndex == -1)
           continue;
 
-        output[selectedIndex] = value;
+        selectedValues[selectedIndex] = value;
       }
 
-      if (!parsedInput.Conditional(keyValuePairs))
+      if (!parsedQuery.WherePredicate(rowValues))
         continue;
 
-      Console.WriteLine(string.Join("|", output));
+      Console.WriteLine(string.Join("|", selectedValues));
     }
   }
 
-  public static List<Record> GetRecordData(FileStream file, List<int> pointerArrayStarts)
+  public static List<Record> ReadSchemaRecords(FileStream file, List<int> cellPointers)
   {
-    return pointerArrayStarts.Select(x => GetRecordData(file, x)).ToList();
+    return cellPointers.Select(x => ReadSchemaRecord(file, x)).ToList();
   }
 
-  public static Record GetRecordData(FileStream file, int cellOffset)
+  public static Record ReadSchemaRecord(FileStream file, int cellOffset)
   {
     file.Seek(cellOffset, SeekOrigin.Begin);
 
-    var (totalPayloadSize, _) = VarintHelper.ReadVarint(file);
-    var (rowId, _) = VarintHelper.ReadVarint(file); // Table B-Tree key
+    var (_, _) = VarintHelper.ReadVarint(file);
+    var (_, _) = VarintHelper.ReadVarint(file); // Table B-Tree key
 
     var (headerSize, headerSizeLen) = VarintHelper.ReadVarint(file);
     int bytesToReadForTypes = (int)headerSize - headerSizeLen;
     byte[] typeBuffer = new byte[bytesToReadForTypes];
     file.ReadExactly(typeBuffer);
 
-    List<ulong> serialTypes = [];
+    List<ulong> serialTypeCodes = [];
     int offset = 0;
     while (offset < typeBuffer.Length)
     {
-      serialTypes.Add(VarintHelper.ReadVarint(typeBuffer, ref offset));
+      serialTypeCodes.Add(VarintHelper.ReadVarint(typeBuffer, ref offset));
     }
 
-    string[] results = new string[5];
+    string[] columnValues = new string[5];
 
-    for (int i = 0; i < serialTypes.Count; i++)
+    for (int i = 0; i < serialTypeCodes.Count; i++)
     {
-      int len = GetSerialTypeLength(serialTypes[i]);
+      int len = GetSerialTypeLength(serialTypeCodes[i]);
       byte[] data = new byte[len];
       if (len > 0) file.ReadExactly(data);
 
       if (i == 3) // rootpage column
-        results[i] = ReadBigEndianInteger(data).ToString();
+        columnValues[i] = ReadBigEndianUnsignedInteger(data).ToString();
       else if (i < 5)
-        results[i] = Encoding.UTF8.GetString(data);
+        columnValues[i] = Encoding.UTF8.GetString(data);
     }
 
     return new Record
     {
-      Type = results[0],
-      Name = results[1],
-      TableName = results[2],
-      RootPage = int.Parse(results[3]),
-      SQL = results[4]
+      Type = columnValues[0],
+      Name = columnValues[1],
+      TableName = columnValues[2],
+      RootPage = int.Parse(columnValues[3]),
+      Sql = columnValues[4]
     };
   }
 
-  public static TableData ParceTableData(Record record)
+  public static TableData ParseTableSchema(Record record)
   {
-    List<string> sqlData = record.SQL
+    List<string> sqlData = record.Sql
       .Split("(").Last()
       .Split(")").First()
       .Replace("\n", "")
@@ -160,7 +160,7 @@ public class RecordHelper()
   public static (string Key, long RowId) ReadIndexLeafEntry(FileStream file)
   {
     var (_, _) = VarintHelper.ReadVarint(file);
-    List<string> values = ReadRecordPayloadValues(file);
+    List<string> values = ReadPayloadValues(file);
 
     if (values.Count < 2)
       throw new InvalidDataException("Index record did not contain key and rowid.");
@@ -175,7 +175,7 @@ public class RecordHelper()
   public static string ReadIndexKeyFromCell(FileStream file)
   {
     var (_, _) = VarintHelper.ReadVarint(file);
-    List<string> values = ReadRecordPayloadValues(file);
+    List<string> values = ReadPayloadValues(file);
 
     if (values.Count == 0)
       throw new InvalidDataException("Index record did not contain a key.");
@@ -183,7 +183,7 @@ public class RecordHelper()
     return values[0];
   }
 
-  private static List<string> ReadRecordPayloadValues(FileStream file)
+  private static List<string> ReadPayloadValues(FileStream file)
   {
     var (headerSize, headerSizeLen) = VarintHelper.ReadVarint(file);
     List<ulong> serialTypes = ReadSerialTypes(file, headerSize, headerSizeLen);
@@ -192,7 +192,7 @@ public class RecordHelper()
     foreach (var serialType in serialTypes)
     {
       int length = GetSerialTypeLength(serialType);
-      values.Add(ReadSerialTypeValue(file, serialType, length));
+      values.Add(ReadSerialValue(file, serialType, length));
     }
 
     return values;
@@ -234,7 +234,7 @@ public class RecordHelper()
     };
   }
 
-  private static string ReadSerialTypeValue(FileStream file, ulong serialType, int length)
+  private static string ReadSerialValue(FileStream file, ulong serialType, int length)
   {
     if (serialType == 0)
       return string.Empty;
@@ -273,7 +273,7 @@ public class RecordHelper()
     return Encoding.UTF8.GetString(dataBytes);
   }
 
-  private static long ReadBigEndianInteger(ReadOnlySpan<byte> buffer)
+  private static long ReadBigEndianUnsignedInteger(ReadOnlySpan<byte> buffer)
   {
     long value = 0;
     foreach (byte b in buffer)
@@ -283,7 +283,7 @@ public class RecordHelper()
 
   private static long ReadBigEndianSignedInteger(ReadOnlySpan<byte> buffer)
   {
-    long value = ReadBigEndianInteger(buffer);
+    long value = ReadBigEndianUnsignedInteger(buffer);
     int bitCount = buffer.Length * 8;
     long signBit = 1L << (bitCount - 1);
     if ((value & signBit) != 0)

@@ -4,7 +4,7 @@ using static System.Buffers.Binary.BinaryPrimitives;
 
 namespace codecrafters_sqlite.src.Helpers;
 
-public class HeaderHelper()
+public static class HeaderHelper
 {
   public static DatabaseHeader ReadDatabaseHeader(FileStream file)
   {

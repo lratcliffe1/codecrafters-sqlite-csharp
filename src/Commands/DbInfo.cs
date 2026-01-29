@@ -8,10 +8,10 @@ public class DbInfo
   public static void Process(FileStream databaseFile)
   {
     DatabaseHeader databaseHeader = HeaderHelper.ReadDatabaseHeader(databaseFile);
-    BTreePageHeader bTreeHeader = HeaderHelper.ReadPageHeader(databaseFile, 1, databaseHeader.PageSize);
+    BTreePageHeader schemaHeader = HeaderHelper.ReadPageHeader(databaseFile, 1, databaseHeader.PageSize);
 
     Console.WriteLine($"database page size: {databaseHeader.PageSize}");
-    Console.WriteLine($"number of tables: {bTreeHeader.CellCount}");
+    Console.WriteLine($"number of tables: {schemaHeader.CellCount}");
 
     // Helper.SeeData(databaseHeader);
     // Console.WriteLine("");

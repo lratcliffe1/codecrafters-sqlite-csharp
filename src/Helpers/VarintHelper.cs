@@ -1,6 +1,6 @@
 namespace codecrafters_sqlite.src.Helpers;
 
-public class VarintHelper()
+public static class VarintHelper
 {
   public static (ulong value, int length) ReadVarint(FileStream file)
   {
