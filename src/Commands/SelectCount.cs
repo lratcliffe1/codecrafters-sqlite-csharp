@@ -10,9 +10,9 @@ public class SelectCount
   public static void Process(FileStream databaseFile, string command)
   {
     DatabaseHeader databaseHeader = HeaderHelper.ReadDatabaseHeader(databaseFile);
-    BTreePageHeader schemaHeader = HeaderHelper.ReadPageHeader(databaseFile, 1, databaseHeader.PageSize);
+    BTreePageHeader schemaHeader = HeaderHelper.ReadPageHeader(databaseFile, SqliteConstants.SchemaPageNumber, databaseHeader.PageSize);
 
-    List<int> cellPointerArray = CellPointerHelper.ReadCellPointers(databaseFile, schemaHeader.PageType, 1, databaseHeader.PageSize, schemaHeader.CellCount);
+    List<int> cellPointerArray = CellPointerHelper.ReadCellPointers(databaseFile, schemaHeader.PageType, SqliteConstants.SchemaPageNumber, databaseHeader.PageSize, schemaHeader.CellCount);
     List<Record> schemaRecords = RecordHelper.ReadSchemaRecords(databaseFile, cellPointerArray);
 
     string tableName = command.Substring(SelectCountPrefix.Length).Trim('\"', ';', ' ');

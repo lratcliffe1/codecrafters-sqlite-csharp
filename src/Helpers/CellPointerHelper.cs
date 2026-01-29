@@ -6,10 +6,10 @@ public static class CellPointerHelper
 {
   public static List<int> ReadCellPointers(FileStream file, byte type, int pageNumber, uint pageSize, ushort cellCount)
   {
-    int pageHeaderSize = (type == 0x02 || type == 0x05) ? 12 : 8;
-    int fileHeaderSize = (pageNumber == 1) ? 100 : 0;
+    int pageHeaderSize = SqliteConstants.GetPageHeaderSize(type);
+    int fileHeaderSize = (pageNumber == SqliteConstants.SchemaPageNumber) ? SqliteConstants.SchemaHeaderSize : 0;
 
-    long pageStart = (pageNumber - 1) * pageSize;
+    long pageStart = PageHelper.GetPageStart(pageSize, pageNumber);
     long pointerArrayStart = pageStart + fileHeaderSize + pageHeaderSize;
 
     file.Seek(pointerArrayStart, SeekOrigin.Begin);

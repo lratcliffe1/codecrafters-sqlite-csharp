@@ -45,8 +45,8 @@ public static class HeaderHelper
   public static BTreePageHeader ReadPageHeader(FileStream file, int pageNumber, uint pageSize)
   {
     // Page 1 starts at 100, all others start at 0
-    int headerOffsetInsidePage = (pageNumber == 1) ? 100 : 0;
-    long pageStart = (pageNumber - 1) * pageSize;
+    int headerOffsetInsidePage = (pageNumber == SqliteConstants.SchemaPageNumber) ? SqliteConstants.SchemaHeaderSize : 0;
+    long pageStart = PageHelper.GetPageStart(pageSize, pageNumber);
 
     file.Seek(pageStart + headerOffsetInsidePage, SeekOrigin.Begin);
 
@@ -66,7 +66,7 @@ public static class HeaderHelper
       CellCount = ReadUInt16BigEndian(buffer.AsSpan(3, 2)),
       CellContentStart = rawContentStart == 0 ? 65536u : rawContentStart,
       FragmentedFreeBytes = buffer[7],
-      RightMostPointer = (type == 0x02 || type == 0x05) ? ReadUInt32BigEndian(buffer.AsSpan(8, 4)) : null
+      RightMostPointer = SqliteConstants.IsInteriorPage(type) ? ReadUInt32BigEndian(buffer.AsSpan(8, 4)) : null
     };
   }
 

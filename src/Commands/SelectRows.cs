@@ -5,24 +5,13 @@ namespace codecrafters_sqlite.src.Commands;
 
 public class SelectRows
 {
-  private const int LeafTablePageType = 13;
-  private const int LeafIndexPageType = 10;
-  private const int InteriorTablePageType = 5;
-  private const int InteriorIndexPageType = 2;
-
   public static void Process(FileStream databaseFile, string command)
   {
     DatabaseHeader databaseHeader = HeaderHelper.ReadDatabaseHeader(databaseFile);
-    BTreePageHeader schemaHeader = HeaderHelper.ReadPageHeader(databaseFile, 1, databaseHeader.PageSize);
+    BTreePageHeader schemaHeader = HeaderHelper.ReadPageHeader(databaseFile, SqliteConstants.SchemaPageNumber, databaseHeader.PageSize);
     ParsedSelectQuery query = SqlParseHelper.ParseSelect(command);
 
-    List<int> schemaCellPointers = CellPointerHelper.ReadCellPointers(
-      databaseFile,
-      schemaHeader.PageType,
-      1,
-      databaseHeader.PageSize,
-      schemaHeader.CellCount
-    );
+    List<int> schemaCellPointers = CellPointerHelper.ReadCellPointers(databaseFile, schemaHeader.PageType, SqliteConstants.SchemaPageNumber, databaseHeader.PageSize, schemaHeader.CellCount);
     List<Record> schemaRecords = RecordHelper.ReadSchemaRecords(databaseFile, schemaCellPointers);
 
     Record tableRecord = schemaRecords.First(x => x.Name == query.TableName && x.Type != "index");
@@ -73,9 +62,9 @@ public class SelectRows
   {
     List<int> cellPointers = CellPointerHelper.ReadCellPointers(databaseFile, indexHeader.PageType, pageNumber, databaseHeader.PageSize, indexHeader.CellCount);
 
-    long pageStart = (pageNumber - 1) * databaseHeader.PageSize;
+    long pageStart = PageHelper.GetPageStart(databaseHeader.PageSize, pageNumber);
 
-    if (indexHeader.PageType == LeafIndexPageType)
+    if (indexHeader.PageType == SqliteConstants.LeafIndexPageType)
     {
       foreach (var pointer in cellPointers)
       {
@@ -88,7 +77,7 @@ public class SelectRows
       return;
     }
 
-    if (indexHeader.PageType != InteriorIndexPageType)
+    if (indexHeader.PageType != SqliteConstants.InteriorIndexPageType)
       return;
 
     foreach (var childPage in EnumerateIndexChildPages(databaseFile, pageStart, cellPointers, indexHeader.RightMostPointer, whereValue))
@@ -102,10 +91,7 @@ public class SelectRows
   {
     foreach (var pointer in cellPointers)
     {
-      databaseFile.Seek(pageStart + pointer, SeekOrigin.Begin);
-      byte[] childBuffer = new byte[4];
-      databaseFile.ReadExactly(childBuffer);
-      int childPage = (int)System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(childBuffer);
+      int childPage = ReadChildPageNumber(databaseFile, pageStart, pointer);
 
       string key = RecordHelper.ReadIndexKeyFromCell(databaseFile);
       int compare = CompareIndexKeys(whereValue, key);
@@ -136,13 +122,13 @@ public class SelectRows
   {
     List<int> cellPointers = CellPointerHelper.ReadCellPointers(databaseFile, tableHeader.PageType, pageNumber, databaseHeader.PageSize, tableHeader.CellCount);
 
-    if (tableHeader.PageType == LeafTablePageType)
+    if (tableHeader.PageType == SqliteConstants.LeafTablePageType)
     {
       RecordHelper.PrintLeafRows(databaseFile, databaseHeader, table, cellPointers, query, pageNumber, allowedRowIds);
       return;
     }
 
-    long pageStart = (pageNumber - 1) * databaseHeader.PageSize;
+    long pageStart = PageHelper.GetPageStart(databaseHeader.PageSize, pageNumber);
 
     foreach (var childPage in EnumerateChildPages(databaseFile, pageStart, cellPointers, tableHeader.RightMostPointer))
     {
@@ -176,23 +162,20 @@ public class SelectRows
 
     List<int> cellPointers = CellPointerHelper.ReadCellPointers(databaseFile, header.PageType, pageNumber, databaseHeader.PageSize, header.CellCount);
 
-    if (header.PageType == LeafTablePageType)
+    if (header.PageType == SqliteConstants.LeafTablePageType)
     {
       RecordHelper.PrintLeafRows(databaseFile, databaseHeader, table, cellPointers, query, pageNumber, new HashSet<long> { rowId });
       return;
     }
 
-    if (header.PageType != InteriorTablePageType)
+    if (header.PageType != SqliteConstants.InteriorTablePageType)
       return;
 
-    long pageStart = (pageNumber - 1) * databaseHeader.PageSize;
+    long pageStart = PageHelper.GetPageStart(databaseHeader.PageSize, pageNumber);
 
     foreach (var pointer in cellPointers)
     {
-      databaseFile.Seek(pageStart + pointer, SeekOrigin.Begin);
-      byte[] childBuffer = new byte[4];
-      databaseFile.ReadExactly(childBuffer);
-      int childPage = (int)System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(childBuffer);
+      int childPage = ReadChildPageNumber(databaseFile, pageStart, pointer);
 
       var (key, _) = VarintHelper.ReadVarint(databaseFile);
       if (rowId <= (long)key)

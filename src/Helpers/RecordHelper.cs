@@ -6,16 +6,9 @@ namespace codecrafters_sqlite.src.Helpers;
 
 public static class RecordHelper
 {
-  public static void PrintLeafRows(
-    FileStream databaseFile,
-    DatabaseHeader databaseHeader,
-    TableData table,
-    List<int> cellPointerArray,
-    ParsedSelectQuery parsedQuery,
-    int pageNumber,
-    HashSet<long>? allowedRowIds = null)
+  public static void PrintLeafRows(FileStream databaseFile, DatabaseHeader databaseHeader, TableData table, List<int> cellPointerArray, ParsedSelectQuery parsedQuery, int pageNumber, HashSet<long>? allowedRowIds = null)
   {
-    var pageStart = databaseHeader.PageSize * (pageNumber - 1);
+    var pageStart = PageHelper.GetPageStart(databaseHeader.PageSize, pageNumber);
 
     foreach (ushort pointer in cellPointerArray)
     {
