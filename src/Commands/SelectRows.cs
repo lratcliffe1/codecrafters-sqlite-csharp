@@ -5,6 +5,8 @@ namespace codecrafters_sqlite.src.Commands;
 
 public class SelectRows
 {
+  private const int LeafTablePageType = 13;
+
   public static void Process(FileStream databaseFile, string command)
   {
     DatabaseHeader databaseHeader = HeaderHelper.ReadDatabaseHeader(databaseFile);
@@ -25,36 +27,36 @@ public class SelectRows
 
   private static void RecursivelyCheckPointers(FileStream databaseFile, DatabaseHeader databaseHeader, BTreePageHeader bTreePageHeader, TableData table, ParsedInput parsedInput, int pageNumber)
   {
-    if (bTreePageHeader.PageType == 13)
+    List<int> cellPointers = CellPointerHelper.GetCellPointerArray(databaseFile, bTreePageHeader.PageType, pageNumber, databaseHeader.PageSize, bTreePageHeader.CellCount);
+
+    if (bTreePageHeader.PageType == LeafTablePageType)
     {
-      List<int> cellPointerArray = CellPointerHelper.GetCellPointerArray(databaseFile, bTreePageHeader.PageType, pageNumber, databaseHeader.PageSize, bTreePageHeader.CellCount);
-
-      RecordHelper.PrintRecordValues(databaseFile, databaseHeader, table, cellPointerArray, parsedInput, pageNumber);
+      RecordHelper.PrintRecordValues(databaseFile, databaseHeader, table, cellPointers, parsedInput, pageNumber);
+      return;
     }
-    else
+
+    long pageStart = (pageNumber - 1) * databaseHeader.PageSize;
+
+    foreach (var childPage in GetChildPages(databaseFile, pageStart, cellPointers))
     {
-      List<int> cellPointerArray = CellPointerHelper.GetCellPointerArray(databaseFile, bTreePageHeader.PageType, pageNumber, databaseHeader.PageSize, bTreePageHeader.CellCount);
-
-      long pageStart = (pageNumber - 1) * databaseHeader.PageSize;
-
-      foreach (var pointer in cellPointerArray)
-      {
-        databaseFile.Seek(pageStart + pointer, SeekOrigin.Begin);
-        byte[] childBuffer = new byte[4];
-        databaseFile.ReadExactly(childBuffer);
-        int childPage = (int)System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(childBuffer);
-
-        BTreePageHeader childHeader = HeaderHelper.ReadPageHeader(databaseFile, childPage, databaseHeader.PageSize);
-        RecursivelyCheckPointers(databaseFile, databaseHeader, childHeader, table, parsedInput, childPage);
-      }
-
-      if (bTreePageHeader.RightMostPointer.HasValue)
-      {
-        int rightMostPage = (int)bTreePageHeader.RightMostPointer.Value;
-
-        BTreePageHeader rightHeader = HeaderHelper.ReadPageHeader(databaseFile, rightMostPage, databaseHeader.PageSize);
-        RecursivelyCheckPointers(databaseFile, databaseHeader, rightHeader, table, parsedInput, rightMostPage);
-      }
+      BTreePageHeader childHeader = HeaderHelper.ReadPageHeader(databaseFile, childPage, databaseHeader.PageSize);
+      RecursivelyCheckPointers(databaseFile, databaseHeader, childHeader, table, parsedInput, childPage);
     }
+  }
+
+  private static IEnumerable<int> GetChildPages(FileStream databaseFile, long pageStart, IEnumerable<int> cellPointers)
+  {
+    foreach (var pointer in cellPointers)
+    {
+      yield return ReadChildPageNumber(databaseFile, pageStart, pointer);
+    }
+  }
+
+  private static int ReadChildPageNumber(FileStream databaseFile, long pageStart, int cellPointer)
+  {
+    databaseFile.Seek(pageStart + cellPointer, SeekOrigin.Begin);
+    byte[] buffer = new byte[4];
+    databaseFile.ReadExactly(buffer);
+    return (int)System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(buffer);
   }
 }
