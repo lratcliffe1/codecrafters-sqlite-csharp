@@ -11,9 +11,10 @@ public class RecordHelper()
     DatabaseHeader databaseHeader,
     TableData table,
     List<int> cellPointerArray,
-    ParsedInput parsedInput)
+    ParsedInput parsedInput,
+    int pageNumber)
   {
-    var pageStart = databaseHeader.PageSize * (table.RootPage - 1);
+    var pageStart = databaseHeader.PageSize * (pageNumber - 1);
 
     foreach (ushort pointer in cellPointerArray)
     {

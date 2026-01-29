@@ -19,8 +19,42 @@ public class SelectRows
     TableData table = RecordHelper.ParceTableData(record);
 
     BTreePageHeader bTreePageHeader = HeaderHelper.ReadPageHeader(databaseFile, table.RootPage, databaseHeader.PageSize);
-    cellPointerArray = CellPointerHelper.GetCellPointerArray(databaseFile, bTreePageHeader.PageType, table.RootPage, databaseHeader.PageSize, bTreePageHeader.CellCount);
 
-    RecordHelper.PrintRecordValues(databaseFile, databaseHeader, table, cellPointerArray, parsedInput);
+    RecursivelyCheckPointers(databaseFile, databaseHeader, bTreePageHeader, table, parsedInput, table.RootPage);
+  }
+
+  private static void RecursivelyCheckPointers(FileStream databaseFile, DatabaseHeader databaseHeader, BTreePageHeader bTreePageHeader, TableData table, ParsedInput parsedInput, int pageNumber)
+  {
+    if (bTreePageHeader.PageType == 13)
+    {
+      List<int> cellPointerArray = CellPointerHelper.GetCellPointerArray(databaseFile, bTreePageHeader.PageType, pageNumber, databaseHeader.PageSize, bTreePageHeader.CellCount);
+
+      RecordHelper.PrintRecordValues(databaseFile, databaseHeader, table, cellPointerArray, parsedInput, pageNumber);
+    }
+    else
+    {
+      List<int> cellPointerArray = CellPointerHelper.GetCellPointerArray(databaseFile, bTreePageHeader.PageType, pageNumber, databaseHeader.PageSize, bTreePageHeader.CellCount);
+
+      long pageStart = (pageNumber - 1) * databaseHeader.PageSize;
+
+      foreach (var pointer in cellPointerArray)
+      {
+        databaseFile.Seek(pageStart + pointer, SeekOrigin.Begin);
+        byte[] childBuffer = new byte[4];
+        databaseFile.ReadExactly(childBuffer);
+        int childPage = (int)System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(childBuffer);
+
+        BTreePageHeader childHeader = HeaderHelper.ReadPageHeader(databaseFile, childPage, databaseHeader.PageSize);
+        RecursivelyCheckPointers(databaseFile, databaseHeader, childHeader, table, parsedInput, childPage);
+      }
+
+      if (bTreePageHeader.RightMostPointer.HasValue)
+      {
+        int rightMostPage = (int)bTreePageHeader.RightMostPointer.Value;
+
+        BTreePageHeader rightHeader = HeaderHelper.ReadPageHeader(databaseFile, rightMostPage, databaseHeader.PageSize);
+        RecursivelyCheckPointers(databaseFile, databaseHeader, rightHeader, table, parsedInput, rightMostPage);
+      }
+    }
   }
 }
