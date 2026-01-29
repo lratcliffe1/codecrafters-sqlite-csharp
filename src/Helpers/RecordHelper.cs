@@ -46,17 +46,34 @@ public class RecordHelper()
 
       foreach (var column in table.Columns)
       {
-        byte[] dataBytes = new byte[columnLengths[i++]];
+        int length = columnLengths[i++];
+        bool isRowIdAlias = length == 0
+          && column.IsPrimaryKey
+          && string.Equals(column.Type, "integer", StringComparison.OrdinalIgnoreCase);
+
+        if (isRowIdAlias)
+        {
+          string rowIdValue = rowId.ToString();
+          keyValuePairs.Add(column.Name, rowIdValue);
+
+          var insertIndex = parsedInput.Selected.IndexOf(column.Name);
+          if (insertIndex != -1)
+            output[insertIndex] = rowIdValue;
+
+          continue;
+        }
+
+        byte[] dataBytes = new byte[length];
         databaseFile.ReadExactly(dataBytes);
+        string value = Encoding.UTF8.GetString(dataBytes);
 
-        keyValuePairs.Add(column.Name, Encoding.UTF8.GetString(dataBytes));
+        keyValuePairs.Add(column.Name, value);
 
-        var insertIndex = parsedInput.Selected.IndexOf(column.Name);
-
-        if (insertIndex == -1)
+        var selectedIndex = parsedInput.Selected.IndexOf(column.Name);
+        if (selectedIndex == -1)
           continue;
 
-        output[insertIndex] = Encoding.UTF8.GetString(dataBytes);
+        output[selectedIndex] = value;
       }
 
       if (!parsedInput.Conditional(keyValuePairs))
