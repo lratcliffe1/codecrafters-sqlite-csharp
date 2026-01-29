@@ -1,3 +1,4 @@
+using System.Text;
 using codecrafters_sqlite.src;
 using codecrafters_sqlite.src.Classes;
 
@@ -36,6 +37,62 @@ else if (command.StartsWith("SELECT COUNT(*)", StringComparison.OrdinalIgnoreCas
   BTreePageHeader bTreePageHeader = Helper.ReadPageHeader(databaseFile, page, databaseHeader.PageSize);
 
   Console.WriteLine(bTreePageHeader.CellCount);
+}
+else if (command.StartsWith("SELECT ", StringComparison.OrdinalIgnoreCase))
+{
+  var splitCommand = command.Split(" ").ToList();
+  var output = splitCommand.First();
+  var selected = splitCommand[1];
+  var tableName = splitCommand.Last();
+
+  List<int> cellPointerArray = Helper.GetCellPointerArray(databaseFile, bTreeHeader.PageType, 1, databaseHeader.PageSize, bTreeHeader.CellCount);
+  List<Record> tables = Helper.GetRecordData(databaseFile, cellPointerArray);
+
+  Record reccord = tables.First(x => x.Name == tableName);
+  TableData table = Helper.ParceTableData(reccord);
+
+  BTreePageHeader bTreePageHeader = Helper.ReadPageHeader(databaseFile, table.RootPage, databaseHeader.PageSize);
+  cellPointerArray = Helper.GetCellPointerArray(databaseFile, bTreePageHeader.PageType, table.RootPage, databaseHeader.PageSize, bTreePageHeader.CellCount);
+
+  var pageStart = databaseHeader.PageSize * (table.RootPage - 1);
+
+  foreach (ushort pointer in cellPointerArray)
+  {
+    databaseFile.Seek(pageStart + pointer, SeekOrigin.Begin);
+
+    var (payloadSize, _) = Helper.ReadVarint(databaseFile);
+    var (rowId, _) = Helper.ReadVarint(databaseFile);
+
+    // 1. Read the Record Header Size
+    var (headerSize, headerSizeLen) = Helper.ReadVarint(databaseFile);
+
+    // 2. Read all the Serial Type Varints in the header
+    int bytesToRead = (int)headerSize - headerSizeLen;
+    byte[] headerBuffer = new byte[bytesToRead];
+    databaseFile.ReadExactly(headerBuffer);
+
+    List<int> columnLengths = [];
+    int offset = 0;
+    while (offset < headerBuffer.Length)
+    {
+      ulong serialType = Helper.ReadVarint(headerBuffer, ref offset);
+      columnLengths.Add(Helper.GetSerialTypeLength(serialType));
+    }
+
+    // 3. Read the columns from the body using the lengths
+    int i = 0;
+
+    foreach (var column in table.Columns)
+    {
+      byte[] dataBytes = new byte[columnLengths[i++]];
+      databaseFile.ReadExactly(dataBytes);
+
+      if (column.Name != selected)
+        continue;
+
+      Console.WriteLine(Encoding.UTF8.GetString(dataBytes));
+    }
+  }
 }
 else
 {

@@ -51,6 +51,7 @@ public static class Helper
     file.Seek(pageStart + headerOffsetInsidePage, SeekOrigin.Begin);
 
     // Interior pages have a 12-byte header, Leaf pages have 8 bytes
+    // internal page (points to other pages), leaf page (contains data)
     // We read 12 to be safe, then check the type
     byte[] buffer = new byte[12];
     file.ReadExactly(buffer, 0, 12);
@@ -97,61 +98,46 @@ public static class Helper
     return pointerArrayStarts.Select(x => GetRecordData(file, x)).ToList();
   }
 
-  public static Record GetRecordData(FileStream file, int pointerArrayStart)
+  public static Record GetRecordData(FileStream file, int cellOffset)
   {
-    file.Seek(pointerArrayStart, SeekOrigin.Begin);
+    file.Seek(cellOffset, SeekOrigin.Begin);
 
-    byte[] buffer = new byte[3];
-    file.ReadExactly(buffer, 0, 3);
+    var (totalPayloadSize, _) = ReadVarint(file);
+    var (rowId, _) = ReadVarint(file); // Table B-Tree key
 
-    _ = buffer[0];
-    _ = buffer[1];
-    var sizeOfHeaderReccord = buffer[2];
+    var (headerSize, headerSizeLen) = ReadVarint(file);
+    int bytesToReadForTypes = (int)headerSize - headerSizeLen;
+    byte[] typeBuffer = new byte[bytesToReadForTypes];
+    file.ReadExactly(typeBuffer);
 
-    buffer = new byte[sizeOfHeaderReccord];
-    file.ReadExactly(buffer, 0, sizeOfHeaderReccord);
-
-    List<int> lengths = [];
-
-    for (var i = 0; i < sizeOfHeaderReccord; i++)
+    List<ulong> serialTypes = [];
+    int offset = 0;
+    while (offset < typeBuffer.Length)
     {
-      if (buffer[i] == 1)
-      {
-        lengths.Add(2);
-        break;
-      }
-
-      lengths.Add((buffer[i] - 13) / 2);
+      serialTypes.Add(ReadVarint(typeBuffer, ref offset));
     }
 
-    file.Seek(pointerArrayStart + sizeOfHeaderReccord + 2, SeekOrigin.Begin);
+    string[] results = new string[5];
 
-    string type = "";
-    string name = "";
-    string tableName = "";
-    byte rootPage = 0;
-
-    foreach (var len in lengths)
+    for (int i = 0; i < serialTypes.Count; i++)
     {
-      buffer = new byte[len];
-      file.ReadExactly(buffer, 0, len);
+      int len = GetSerialTypeLength(serialTypes[i]);
+      byte[] data = new byte[len];
+      if (len > 0) file.ReadExactly(data);
 
-      if (type == "")
-        type = Encoding.UTF8.GetString(buffer, 0, len);
-      else if (name == "")
-        name = Encoding.UTF8.GetString(buffer, 0, len);
-      else if (tableName == "")
-        tableName = Encoding.UTF8.GetString(buffer, 0, len);
-      else
-        rootPage = buffer[0];
+      if (i == 3) // rootpage column
+        results[i] = ReadBigEndianInteger(data).ToString();
+      else if (i < 5)
+        results[i] = Encoding.UTF8.GetString(data);
     }
 
     return new Record
     {
-      Type = type,
-      Name = name,
-      TableName = tableName,
-      RootPage = rootPage,
+      Type = results[0],
+      Name = results[1],
+      TableName = results[2],
+      RootPage = int.Parse(results[3]),
+      SQL = results[4]
     };
   }
 
@@ -164,5 +150,109 @@ public static class Helper
 
       Console.Error.WriteLine($"{name,-25}: {value}");
     }
+  }
+
+  public static (ulong value, int length) ReadVarint(FileStream file)
+  {
+    ulong value = 0;
+
+    for (int i = 0; i < 8; i++)
+    {
+      int rawByte = file.ReadByte();
+      if (rawByte == -1)
+        throw new EndOfStreamException();
+
+      byte b = (byte)rawByte;
+      value = (value << 7) | (byte)(b & 0x7F);
+
+      if ((b & 0x80) == 0)
+        return (value, i + 1);
+    }
+
+    int lastRawByte = file.ReadByte();
+    if (lastRawByte == -1)
+      throw new EndOfStreamException();
+
+    value = (value << 8) | (ulong)(byte)lastRawByte;
+    return (value, 9);
+  }
+
+  public static ulong ReadVarint(ReadOnlySpan<byte> buffer, ref int offset)
+  {
+    ulong value = 0;
+
+    for (int i = 0; i < 8 && offset < buffer.Length; i++)
+    {
+      byte b = buffer[offset++];
+      value = (value << 7) | (byte)(b & 0x7F);
+
+      if ((b & 0x80) == 0)
+        return value;
+    }
+
+    if (offset < buffer.Length)
+      value = (value << 8) | buffer[offset++];
+
+    return value;
+  }
+
+  public static int GetSerialTypeLength(ulong serialType)
+  {
+    return serialType switch
+    {
+      0 => 0,
+      1 => 1,
+      2 => 2,
+      3 => 3,
+      4 => 4,
+      5 => 6,
+      6 => 8,
+      7 => 8,
+      8 => 0,
+      9 => 0,
+      _ => serialType >= 12
+        ? (int)((serialType - (serialType % 2 == 0 ? 12u : 13u)) / 2)
+        : 0
+    };
+  }
+
+  private static long ReadBigEndianInteger(ReadOnlySpan<byte> buffer)
+  {
+    long value = 0;
+    foreach (byte b in buffer)
+      value = (value << 8) | b;
+    return value;
+  }
+
+  public static TableData ParceTableData(Record record)
+  {
+    List<string> sqlData = record.SQL
+      .Split("(").Last()
+      .Split(")").First()
+      .Replace("\n", "")
+      .Split(',').ToList();
+
+    List<Column> columns = [];
+
+    foreach (var row in sqlData)
+    {
+      List<string> rowData = row.Split(" ").ToList();
+
+      columns.Add(new Column
+      {
+        Name = rowData[0].Trim(),
+        Type = rowData[1].Trim(),
+        IsPrimaryKey = rowData.Count > 3 && rowData[2] == "primary" && rowData[3] == "key",
+      });
+    }
+
+    return new TableData()
+    {
+      Type = record.Type,
+      Name = record.Name,
+      TableName = record.TableName,
+      RootPage = record.RootPage,
+      Columns = columns,
+    };
   }
 }
