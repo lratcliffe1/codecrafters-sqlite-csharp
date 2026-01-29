@@ -9,7 +9,7 @@ public static class Helper
       string name = prop.Name;
       object? value = prop.GetValue(obj);
 
-      Console.Error.WriteLine($"{name,-25}: {value}");
+      Console.WriteLine($"{name,-25}: {value}");
     }
   }
 }

@@ -28,7 +28,12 @@ public static class ParceInputSqlHelper
     if (whereIndex != -1)
     {
       string columnToCompare = splitCommand[whereIndex + 1];
-      string valueToCompare = splitCommand.Last().Replace("\'", "");
+      int equalsIndex = splitCommand.IndexOf("=");
+
+      string valueToCompare = string.Join(
+          " ",
+          splitCommand[(equalsIndex + 1)..]
+      ).Trim('\'');
 
       conditional = (keyValuePair) => keyValuePair[columnToCompare] == valueToCompare;
     }
