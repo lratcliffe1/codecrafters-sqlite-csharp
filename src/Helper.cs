@@ -230,13 +230,14 @@ public static class Helper
       .Split("(").Last()
       .Split(")").First()
       .Replace("\n", "")
-      .Split(',').ToList();
+      .Split(',')
+      .ToList();
 
     List<Column> columns = [];
 
     foreach (var row in sqlData)
     {
-      List<string> rowData = row.Split(" ").ToList();
+      List<string> rowData = row.Trim().Split(" ").ToList();
 
       columns.Add(new Column
       {

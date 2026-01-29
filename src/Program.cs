@@ -48,8 +48,8 @@ else if (command.StartsWith("SELECT ", StringComparison.OrdinalIgnoreCase))
   List<int> cellPointerArray = Helper.GetCellPointerArray(databaseFile, bTreeHeader.PageType, 1, databaseHeader.PageSize, bTreeHeader.CellCount);
   List<Record> tables = Helper.GetRecordData(databaseFile, cellPointerArray);
 
-  Record reccord = tables.First(x => x.Name == tableName);
-  TableData table = Helper.ParceTableData(reccord);
+  Record record = tables.First(x => x.Name == tableName);
+  TableData table = Helper.ParceTableData(record);
 
   BTreePageHeader bTreePageHeader = Helper.ReadPageHeader(databaseFile, table.RootPage, databaseHeader.PageSize);
   cellPointerArray = Helper.GetCellPointerArray(databaseFile, bTreePageHeader.PageType, table.RootPage, databaseHeader.PageSize, bTreePageHeader.CellCount);
