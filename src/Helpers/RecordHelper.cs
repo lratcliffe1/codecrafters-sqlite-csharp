@@ -55,7 +55,7 @@ public class RecordHelper()
         output[insertIndex] = Encoding.UTF8.GetString(dataBytes);
       }
 
-      Console.WriteLine(string.Join(" | ", output));
+      Console.WriteLine(string.Join("|", output));
     }
   }
 
