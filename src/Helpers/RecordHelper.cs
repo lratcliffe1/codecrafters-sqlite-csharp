@@ -41,11 +41,14 @@ public class RecordHelper()
       // 3. Read the columns from the body using the lengths
       int i = 0;
       List<string> output = [.. new string[parsedInput.Selected.Count]];
+      Dictionary<string, string> keyValuePairs = [];
 
       foreach (var column in table.Columns)
       {
         byte[] dataBytes = new byte[columnLengths[i++]];
         databaseFile.ReadExactly(dataBytes);
+
+        keyValuePairs.Add(column.Name, Encoding.UTF8.GetString(dataBytes));
 
         var insertIndex = parsedInput.Selected.IndexOf(column.Name);
 
@@ -54,6 +57,9 @@ public class RecordHelper()
 
         output[insertIndex] = Encoding.UTF8.GetString(dataBytes);
       }
+
+      if (!parsedInput.Conditional(keyValuePairs))
+        continue;
 
       Console.WriteLine(string.Join("|", output));
     }

@@ -6,6 +6,7 @@ public class ParsedInput()
   public required List<string> Selected { get; set; }
   public required string TableName { get; set; }
 
+  public required Func<Dictionary<string, string>, bool> Conditional { get; set; }
 }
 
 public static class ParceInputSqlHelper
@@ -13,20 +14,31 @@ public static class ParceInputSqlHelper
   public static ParsedInput ParseInput(string command)
   {
     var splitCommand = command
-      .ToLower()
       .Replace(",", "")
+      .Replace("from", "FROM")
+      .Replace("where", "WHERE")
       .Split(" ")
       .ToList();
 
-    var baseCommand = splitCommand.First();
-    var selected = splitCommand[(splitCommand.IndexOf(baseCommand) + 1)..splitCommand.IndexOf("from")];
-    var tableName = splitCommand.Last();
+    int fromIndex = splitCommand.IndexOf("FROM");
+    int whereIndex = splitCommand.IndexOf("WHERE");
+
+    Func<Dictionary<string, string>, bool> conditional = static _ => true;
+
+    if (whereIndex != -1)
+    {
+      string columnToCompare = splitCommand[whereIndex + 1];
+      string valueToCompare = splitCommand.Last().Replace("\'", "");
+
+      conditional = (keyValuePair) => keyValuePair[columnToCompare] == valueToCompare;
+    }
 
     return new ParsedInput()
     {
-      BaseCommand = baseCommand,
-      Selected = selected,
-      TableName = tableName,
+      BaseCommand = splitCommand.First(),
+      Selected = splitCommand[1..fromIndex],
+      TableName = splitCommand[fromIndex + 1],
+      Conditional = conditional
     };
   }
 }
