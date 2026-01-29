@@ -12,5 +12,9 @@ public class DbInfo
 
     Console.WriteLine($"database page size: {databaseHeader.PageSize}");
     Console.WriteLine($"number of tables: {bTreeHeader.CellCount}");
+
+    // Helper.SeeData(databaseHeader);
+    // Console.WriteLine("");
+    // Helper.SeeData(bTreeHeader);
   }
 }

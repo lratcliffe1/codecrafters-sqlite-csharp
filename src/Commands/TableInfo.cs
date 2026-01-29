@@ -14,5 +14,8 @@ public class TableInfo
     List<Record> records = RecordHelper.GetRecordData(databaseFile, cellPointerArray);
 
     Console.WriteLine(string.Join(" ", records.Select(x => x.Name)));
+
+    // foreach (var r in records)
+    //   Helper.SeeData(r);
   }
 }
