@@ -82,7 +82,7 @@ public static class SqlParseHelper
     string table = afterOn[..openParen].Trim();
     string column = afterOn[(openParen + 1)..closeParen].Trim();
 
-    if (column.Contains(","))
+    if (column.Contains(','))
       throw new NotSupportedException("Only single-column indexes are supported");
 
     return new ParsedIndexDefinition

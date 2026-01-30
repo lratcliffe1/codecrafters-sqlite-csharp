@@ -7,7 +7,7 @@ public class SelectCount
 {
   private const string SelectCountPrefix = "SELECT COUNT(*) FROM ";
 
-  public static void Process(FileStream databaseFile, string command)
+  public static void Process(Stream databaseFile, string command)
   {
     DatabaseHeader databaseHeader = HeaderHelper.ReadDatabaseHeader(databaseFile);
     BTreePageHeader schemaHeader = HeaderHelper.ReadPageHeader(databaseFile, SqliteConstants.SchemaPageNumber, databaseHeader.PageSize);

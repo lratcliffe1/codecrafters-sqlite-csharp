@@ -6,7 +6,7 @@ namespace codecrafters_sqlite.src.Helpers;
 
 public static class HeaderHelper
 {
-  public static DatabaseHeader ReadDatabaseHeader(FileStream file)
+  public static DatabaseHeader ReadDatabaseHeader(Stream file)
   {
     file.Seek(0, SeekOrigin.Begin);
 
@@ -42,7 +42,7 @@ public static class HeaderHelper
     };
   }
 
-  public static BTreePageHeader ReadPageHeader(FileStream file, int pageNumber, uint pageSize)
+  public static BTreePageHeader ReadPageHeader(Stream file, int pageNumber, uint pageSize)
   {
     // Page 1 starts at 100, all others start at 0
     int headerOffsetInsidePage = (pageNumber == SqliteConstants.SchemaPageNumber) ? SqliteConstants.SchemaHeaderSize : 0;

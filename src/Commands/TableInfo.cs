@@ -5,7 +5,7 @@ namespace codecrafters_sqlite.src.Commands;
 
 public class TableInfo
 {
-  public static void Process(FileStream databaseFile)
+  public static void Process(Stream databaseFile)
   {
     DatabaseHeader databaseHeader = HeaderHelper.ReadDatabaseHeader(databaseFile);
     BTreePageHeader schemaHeader = HeaderHelper.ReadPageHeader(databaseFile, SqliteConstants.SchemaPageNumber, databaseHeader.PageSize);

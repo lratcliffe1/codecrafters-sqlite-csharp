@@ -7,7 +7,7 @@ var (path, command) = args.Length switch
   _ => (args[0], args[1])
 };
 
-FileStream? databaseFile = File.OpenRead(path);
+Stream? databaseFile = File.OpenRead(path);
 
 if (command == ".dbinfo")
 {

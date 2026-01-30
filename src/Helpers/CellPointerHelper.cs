@@ -4,7 +4,7 @@ namespace codecrafters_sqlite.src.Helpers;
 
 public static class CellPointerHelper
 {
-  public static List<int> ReadCellPointers(FileStream file, byte type, int pageNumber, uint pageSize, ushort cellCount)
+  public static List<int> ReadCellPointers(Stream file, byte type, int pageNumber, uint pageSize, ushort cellCount)
   {
     int pageHeaderSize = SqliteConstants.GetPageHeaderSize(type);
     int fileHeaderSize = (pageNumber == SqliteConstants.SchemaPageNumber) ? SqliteConstants.SchemaHeaderSize : 0;
