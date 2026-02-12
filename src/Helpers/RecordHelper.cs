@@ -6,7 +6,14 @@ namespace codecrafters_sqlite.src.Helpers;
 
 public static class RecordHelper
 {
-  public static void PrintLeafRows(Stream databaseFile, DatabaseHeader databaseHeader, TableData table, List<int> cellPointerArray, ParsedSelectQuery parsedQuery, int pageNumber, HashSet<long>? allowedRowIds = null)
+  public static void PrintLeafRows(
+    Stream databaseFile,
+    DatabaseHeader databaseHeader,
+    TableData table,
+    List<int> cellPointerArray,
+    ParsedSelectQuery parsedQuery,
+    int pageNumber,
+    HashSet<long>? allowedRowIds = null)
   {
     // Compute the byte offset of the page start within the file.
     // Every page has a fixed size, so we can jump directly to it.

@@ -38,7 +38,7 @@ public static class VarintHelper
       throw new EndOfStreamException();
 
     // Append the final 8 bits to the accumulator.
-    value = (value << 8) | (ulong)(byte)lastRawByte;
+    value = (value << 8) | (byte)lastRawByte;
     // This varint used all 9 bytes.
     return (value, 9);
   }

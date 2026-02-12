@@ -62,10 +62,7 @@ public static class SqlParseHelper
 
   public static ParsedIndexDefinition ParseIndexSql(string command)
   {
-    command = string.Join(
-      " ",
-      command.Split((char[])null!, StringSplitOptions.RemoveEmptyEntries)
-    );
+    command = string.Join(" ", command.Split((char[])null!, StringSplitOptions.RemoveEmptyEntries));
 
     var lower = command.ToLowerInvariant();
     int onIndex = lower.IndexOf(" on ");

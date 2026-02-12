@@ -15,7 +15,7 @@ public class SelectCount
     List<int> cellPointerArray = CellPointerHelper.ReadCellPointers(databaseFile, schemaHeader.PageType, SqliteConstants.SchemaPageNumber, databaseHeader.PageSize, schemaHeader.CellCount);
     List<Record> schemaRecords = RecordHelper.ReadSchemaRecords(databaseFile, cellPointerArray);
 
-    string tableName = command.Substring(SelectCountPrefix.Length).Trim('\"', ';', ' ');
+    string tableName = command[SelectCountPrefix.Length..].Trim('\"', ';', ' ');
     int page = schemaRecords.First(x => x.Name == tableName).RootPage;
 
     BTreePageHeader bTreePageHeader = HeaderHelper.ReadPageHeader(databaseFile, page, databaseHeader.PageSize);
